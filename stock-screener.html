@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock Screening Scorecard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #1f2937;
+      --border:    #30363d;
+      --accent:    #2ea043;
+      --accent2:   #388bfd;
+      --warn:      #e3b341;
+      --danger:    #f85149;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --radius:    10px;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px 80px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    .logo-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .logo-icon {
+      width: 40px; height: 40px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+    }
+
+    h1 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 14px;
+      margin-top: 6px;
+    }
+
+    .card {
+      width: 100%;
+      max-width: 680px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 32px;
+    }
+
+    .field-group {
+      margin-bottom: 22px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 8px;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      padding: 11px 14px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    input[type="text"]:focus {
+      border-color: var(--accent2);
+    }
+
+    input[type="text"]::placeholder { color: var(--muted); }
+
+    .url-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .url-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .url-row input { flex: 1; }
+
+    .url-row .url-label {
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+      min-width: 80px;
+      text-align: right;
+    }
+
+    .remove-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 16px;
+      width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.15s;
+    }
+    .remove-btn:hover { border-color: var(--danger); color: var(--danger); }
+
+    .add-link-btn {
+      background: none;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 13px;
+      padding: 9px 14px;
+      width: 100%;
+      margin-top: 8px;
+      transition: all 0.15s;
+      font-family: 'Inter', sans-serif;
+    }
+    .add-link-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 28px 0;
+    }
+
+    .api-note {
+      font-size: 12px;
+      color: var(--muted);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 24px;
+      line-height: 1.6;
+    }
+
+    .api-note strong { color: var(--warn); }
+
+    #start-btn {
+      width: 100%;
+      background: linear-gradient(135deg, var(--accent), #2da44e);
+      border: none;
+      border-radius: var(--radius);
+      color: #fff;
+      cursor: pointer;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      padding: 15px;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    #start-btn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+    #start-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+    /* Progress / status */
+    #status-area {
+      width: 100%;
+      max-width: 680px;
+      margin-top: 24px;
+      display: none;
+    }
+
+    .status-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 28px 32px;
+    }
+
+    .step-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-top: 16px;
+    }
+
+    .step-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      font-size: 14px;
+      color: var(--muted);
+      transition: color 0.2s;
+    }
+
+    .step-item.done { color: var(--text); }
+    .step-item.active { color: var(--accent2); }
+    .step-item.error { color: var(--danger); }
+
+    .step-dot {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px;
+      margin-top: 1px;
+      transition: all 0.2s;
+    }
+
+    .step-item.done .step-dot   { background: var(--accent);  border-color: var(--accent); color: #fff; }
+    .step-item.active .step-dot { border-color: var(--accent2); animation: pulse 1.2s infinite; }
+    .step-item.error .step-dot  { background: var(--danger); border-color: var(--danger); color: #fff; }
+
+    @keyframes pulse {
+      0%,100% { box-shadow: 0 0 0 0 rgba(56,139,253,.4); }
+      50%      { box-shadow: 0 0 0 6px rgba(56,139,253,0); }
+    }
+
+    /* Claude's streaming response display */
+    #response-preview {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 20px;
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--muted);
+      max-height: 260px;
+      overflow-y: auto;
+      display: none;
+      white-space: pre-wrap;
+      font-family: 'Inter', monospace;
+    }
+
+    /* Download section */
+    #download-area {
+      display: none;
+      text-align: center;
+    }
+
+    .success-icon {
+      font-size: 48px;
+      margin-bottom: 14px;
+    }
+
+    #download-area h2 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 22px;
+      margin-bottom: 8px;
+    }
+
+    #download-area p {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 24px;
+    }
+
+    #download-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: linear-gradient(135deg, var(--accent2), #1f6feb);
+      border: none;
+      border-radius: var(--radius);
+      color: #fff;
+      cursor: pointer;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      padding: 13px 28px;
+      transition: opacity 0.15s;
+    }
+    #download-btn:hover { opacity: 0.9; }
+
+    .restart-btn {
+      display: block;
+      margin: 16px auto 0;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--muted);
+      cursor: pointer;
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      padding: 9px 20px;
+      transition: all 0.15s;
+    }
+    .restart-btn:hover { border-color: var(--muted); color: var(--text); }
+
+    .error-msg {
+      background: rgba(248,81,73,0.1);
+      border: 1px solid rgba(248,81,73,0.4);
+      border-radius: 8px;
+      color: var(--danger);
+      font-size: 13px;
+      padding: 14px;
+      margin-top: 16px;
+      display: none;
+      line-height: 1.6;
+    }
+
+    /* Ticker badge */
+    .ticker-hint {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 5px;
+    }
+
+    footer {
+      margin-top: 48px;
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo-row">
+    <div class="logo-icon">📊</div>
+    <h1>Stock Screening Scorecard</h1>
+  </div>
+  <p class="subtitle">Enter the company details below, then click <strong>Start Processing</strong></p>
+</header>
+
+<!-- INPUT FORM -->
+<div class="card" id="input-card">
+
+  <div class="field-group">
+    <label>Company Name</label>
+    <input type="text" id="company-name" placeholder="e.g. Apple Inc." />
+  </div>
+
+  <div class="field-group">
+    <label>Stock Ticker</label>
+    <input type="text" id="ticker" placeholder="e.g. AAPL or TSX:CCO" />
+    <p class="ticker-hint">Include exchange prefix for non-US stocks (e.g. TSX:MDA, NYSE:F)</p>
+  </div>
+
+  <div class="field-group">
+    <label>Research Links</label>
+    <div class="url-list" id="url-list">
+      <div class="url-row">
+        <span class="url-label">Yahoo Finance</span>
+        <input type="text" class="url-input" placeholder="https://finance.yahoo.com/quote/AAPL" />
+      </div>
+      <div class="url-row">
+        <span class="url-label">TradingView</span>
+        <input type="text" class="url-input" placeholder="https://www.tradingview.com/chart/..." />
+        <button class="remove-btn" onclick="removeUrl(this)" title="Remove">×</button>
+      </div>
+    </div>
+    <button class="add-link-btn" onclick="addUrl()">+ Add another link</button>
+  </div>
+
+  <input type="hidden" id="api-key" />
+
+  <button id="start-btn" onclick="startProcessing()">▶ Start Processing</button>
+  <div class="error-msg" id="input-error"></div>
+</div>
+
+<!-- STATUS AREA -->
+<div id="status-area">
+  <div class="status-card">
+    <div style="font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:600;">Processing <span id="processing-company"></span>…</div>
+    <ul class="step-list" id="step-list">
+      <li class="step-item" id="step-1"><span class="step-dot">1</span><span>Validating inputs and preparing request</span></li>
+      <li class="step-item" id="step-2"><span class="step-dot">2</span><span>Connecting to Claude AI</span></li>
+      <li class="step-item" id="step-3"><span class="step-dot">3</span><span>Navigating to provided links and extracting data</span></li>
+      <li class="step-item" id="step-4"><span class="step-dot">4</span><span>Analysing financial metrics and scoring</span></li>
+      <li class="step-item" id="step-5"><span class="step-dot">5</span><span>Populating the Excel scorecard</span></li>
+    </ul>
+    <div id="response-preview"></div>
+    <div class="error-msg" id="process-error"></div>
+  </div>
+</div>
+
+<!-- DOWNLOAD AREA -->
+<div id="download-area" class="card" style="max-width:680px;margin-top:24px;">
+  <div class="success-icon">✅</div>
+  <h2>Your file is ready for download</h2>
+  <p>The scorecard has been populated with data extracted from your links.</p>
+  <button id="download-btn" onclick="downloadExcel()">⬇ Download Excel Scorecard</button>
+  <button class="restart-btn" onclick="resetApp()">← Start a new company</button>
+</div>
+
+<footer>Stock Screening Scorecard · Powered by Claude AI</footer>
+
+<script>
+  // ─────────────────────────────────────────────────────────
+  // CONFIGURATION — paste your Anthropic API key below
+  // ─────────────────────────────────────────────────────────
+  const HARDCODED_API_KEY = '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';
+  // ─────────────────────────────────────────────────────────
+
+  let extractedData = null;
+  let currentCompany = '';
+  let currentTicker = '';
+
+  // URL management
+  let extraUrlCount = 2; // yahoo + tradingview already
+
+  function addUrl() {
+    const list = document.getElementById('url-list');
+    const row = document.createElement('div');
+    row.className = 'url-row';
+    row.innerHTML = `
+      <span class="url-label">Link ${++extraUrlCount}</span>
+      <input type="text" class="url-input" placeholder="https://..." />
+      <button class="remove-btn" onclick="removeUrl(this)" title="Remove">×</button>
+    `;
+    list.appendChild(row);
+  }
+
+  function removeUrl(btn) {
+    btn.closest('.url-row').remove();
+  }
+
+  function setStep(n, state) {
+    for (let i = 1; i <= 5; i++) {
+      const el = document.getElementById('step-' + i);
+      el.className = 'step-item';
+    }
+    for (let i = 1; i <= n; i++) {
+      const el = document.getElementById('step-' + i);
+      if (i < n) el.classList.add('done');
+      else el.classList.add(state || 'active');
+    }
+    // Mark previous steps done
+    for (let i = 1; i < n; i++) {
+      const dot = document.getElementById('step-' + i).querySelector('.step-dot');
+      dot.textContent = '✓';
+    }
+  }
+
+  function showError(id, msg) {
+    const el = document.getElementById(id);
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  function hideError(id) {
+    document.getElementById(id).style.display = 'none';
+  }
+
+  async function startProcessing() {
+    hideError('input-error');
+    hideError('process-error');
+
+    const company = document.getElementById('company-name').value.trim();
+    const ticker  = document.getElementById('ticker').value.trim();
+    const apiKey  = HARDCODED_API_KEY;
+    const urlInputs = document.querySelectorAll('.url-input');
+    const urls = Array.from(urlInputs).map(i => i.value.trim()).filter(Boolean);
+
+    if (!company)  return showError('input-error', 'Please enter a company name.');
+    if (!ticker)   return showError('input-error', 'Please enter the stock ticker.');
+    if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') return showError('input-error', 'API key not configured. Open the HTML file and replace YOUR_API_KEY_HERE with your Anthropic API key.');
+    if (urls.length === 0) return showError('input-error', 'Please add at least one research link.');
+
+    currentCompany = company;
+    currentTicker  = ticker;
+
+    document.getElementById('start-btn').disabled = true;
+    document.getElementById('input-card').style.opacity = '0.5';
+    document.getElementById('input-card').style.pointerEvents = 'none';
+    document.getElementById('status-area').style.display = 'block';
+    document.getElementById('processing-company').textContent = company;
+    document.getElementById('response-preview').style.display = 'none';
+
+    setStep(1, 'active');
+    await sleep(600);
+    setStep(1, 'done');
+    setStep(2, 'active');
+
+    const prompt = buildPrompt(company, ticker, urls);
+
+    const preview = document.getElementById('response-preview');
+    preview.style.display = 'block';
+    preview.textContent = '';
+
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 4096,
+          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+          system: `You are a professional stock analyst assistant. The user will give you a company name, ticker, and links to financial data pages. Your job is to:
+1. Use web search to gather the following data for the stock (search Yahoo Finance, TradingView, and any other provided links).
+2. Extract ALL of the following data points. If a value is not available, use "N/A".
+3. Return ONLY a valid JSON object (no markdown, no extra text) with exactly this structure:
+
+{
+  "company_name": "",
+  "ticker": "",
+  "date": "",
+  "current_price": "",
+  "52w_high": "",
+  "52w_low": "",
+  "market_cap": "",
+  "pe_ratio": "",
+  "forward_pe": "",
+  "eps_ttm": "",
+  "eps_next_year": "",
+  "revenue_ttm": "",
+  "revenue_growth_yoy": "",
+  "gross_margin": "",
+  "profit_margin": "",
+  "operating_margin": "",
+  "ebitda": "",
+  "free_cash_flow": "",
+  "debt_to_equity": "",
+  "current_ratio": "",
+  "roe": "",
+  "roa": "",
+  "beta": "",
+  "avg_volume": "",
+  "dividend_yield": "",
+  "payout_ratio": "",
+  "analyst_recommendation": "",
+  "target_price_low": "",
+  "target_price_mean": "",
+  "target_price_high": "",
+  "num_analysts": "",
+  "sector": "",
+  "industry": "",
+  "short_interest": "",
+  "institutional_ownership": "",
+  "insider_ownership": "",
+  "technical_trend": "",
+  "support_level": "",
+  "resistance_level": "",
+  "rsi_14": "",
+  "moving_avg_50d": "",
+  "moving_avg_200d": "",
+  "summary_notes": ""
+}
+
+Do not wrap in markdown. Return only the raw JSON.`,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+
+      setStep(2, 'done');
+      setStep(3, 'active');
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error?.message || `API error ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      setStep(3, 'done');
+      setStep(4, 'active');
+
+      // Find the text block
+      let rawText = '';
+      for (const block of data.content) {
+        if (block.type === 'text') rawText += block.text;
+      }
+
+      preview.textContent = rawText.slice(0, 800) + (rawText.length > 800 ? '…' : '');
+
+      // Parse JSON from response
+      let parsed;
+      try {
+        // strip any markdown fences if present
+        const clean = rawText.replace(/```json|```/g, '').trim();
+        // Find first { and last }
+        const start = clean.indexOf('{');
+        const end   = clean.lastIndexOf('}');
+        parsed = JSON.parse(clean.slice(start, end + 1));
+      } catch (e) {
+        throw new Error('Claude returned a response but the data could not be parsed. Try again.\n\nRaw: ' + rawText.slice(0, 300));
+      }
+
+      extractedData = parsed;
+
+      setStep(4, 'done');
+      setStep(5, 'active');
+      await sleep(700);
+      setStep(5, 'done');
+      await sleep(500);
+
+      document.getElementById('status-area').style.display = 'none';
+      document.getElementById('download-area').style.display = 'block';
+
+    } catch (err) {
+      setStep(parseInt(document.querySelector('.step-item.active')?.id?.split('-')[1] || 2), 'error');
+      showError('process-error', '❌ ' + (err.message || String(err)));
+      document.getElementById('start-btn').disabled = false;
+      document.getElementById('input-card').style.opacity = '1';
+      document.getElementById('input-card').style.pointerEvents = 'auto';
+    }
+  }
+
+  function buildPrompt(company, ticker, urls) {
+    const linkList = urls.map((u, i) => `${i + 1}. ${u}`).join('\n');
+    return `Please research and extract financial data for the following stock:
+
+Company: ${company}
+Ticker: ${ticker}
+Date: ${new Date().toLocaleDateString('en-CA')}
+
+Research Links:
+${linkList}
+
+Use web search to find current financial metrics. Visit the Yahoo Finance page and any other provided links to gather comprehensive data. Return a complete JSON object as instructed in your system prompt.`;
+  }
+
+  function downloadExcel() {
+    if (!extractedData) return;
+
+    const d = extractedData;
+    const today = new Date().toLocaleDateString('en-CA');
+
+    const wb = XLSX.utils.book_new();
+
+    // ── Sheet 1: Summary ──────────────────────────────────────
+    const summaryRows = [
+      ['STOCK SCREENING SCORECARD', '', '', ''],
+      ['Generated:', today, '', ''],
+      ['', '', '', ''],
+      ['COMPANY OVERVIEW', '', '', ''],
+      ['Company Name',         d.company_name || currentCompany],
+      ['Ticker',               d.ticker || currentTicker],
+      ['Date',                 d.date || today],
+      ['Sector',               d.sector],
+      ['Industry',             d.industry],
+      ['', '', '', ''],
+      ['PRICE & VALUATION', '', '', ''],
+      ['Current Price',        d.current_price],
+      ['52-Week High',         d['52w_high']],
+      ['52-Week Low',          d['52w_low']],
+      ['Market Cap',           d.market_cap],
+      ['P/E Ratio (TTM)',      d.pe_ratio],
+      ['Forward P/E',          d.forward_pe],
+      ['EPS (TTM)',            d.eps_ttm],
+      ['EPS (Next Year Est.)', d.eps_next_year],
+      ['Beta',                 d.beta],
+      ['', '', '', ''],
+      ['FINANCIAL PERFORMANCE', '', '', ''],
+      ['Revenue (TTM)',        d.revenue_ttm],
+      ['Revenue Growth YoY',  d.revenue_growth_yoy],
+      ['Gross Margin',        d.gross_margin],
+      ['Operating Margin',    d.operating_margin],
+      ['Profit Margin',       d.profit_margin],
+      ['EBITDA',              d.ebitda],
+      ['Free Cash Flow',      d.free_cash_flow],
+      ['', '', '', ''],
+      ['BALANCE SHEET', '', '', ''],
+      ['Debt/Equity',         d.debt_to_equity],
+      ['Current Ratio',       d.current_ratio],
+      ['ROE',                 d.roe],
+      ['ROA',                 d.roa],
+      ['', '', '', ''],
+      ['DIVIDENDS', '', '', ''],
+      ['Dividend Yield',      d.dividend_yield],
+      ['Payout Ratio',        d.payout_ratio],
+      ['', '', '', ''],
+      ['ANALYST COVERAGE', '', '', ''],
+      ['Recommendation',      d.analyst_recommendation],
+      ['Price Target – Low',  d.target_price_low],
+      ['Price Target – Mean', d.target_price_mean],
+      ['Price Target – High', d.target_price_high],
+      ['# of Analysts',       d.num_analysts],
+      ['', '', '', ''],
+      ['OWNERSHIP & FLOAT', '', '', ''],
+      ['Short Interest',          d.short_interest],
+      ['Institutional Ownership', d.institutional_ownership],
+      ['Insider Ownership',       d.insider_ownership],
+      ['Avg Volume',              d.avg_volume],
+      ['', '', '', ''],
+      ['TECHNICALS', '', '', ''],
+      ['Technical Trend',   d.technical_trend],
+      ['Support Level',     d.support_level],
+      ['Resistance Level',  d.resistance_level],
+      ['RSI (14)',          d.rsi_14],
+      ['50-Day MA',         d.moving_avg_50d],
+      ['200-Day MA',        d.moving_avg_200d],
+      ['', '', '', ''],
+      ['ANALYST NOTES', '', '', ''],
+      ['Summary', d.summary_notes],
+    ];
+
+    const ws1 = XLSX.utils.aoa_to_sheet(summaryRows);
+
+    // Column widths
+    ws1['!cols'] = [{ wch: 30 }, { wch: 28 }, { wch: 20 }, { wch: 20 }];
+
+    // Style header row (xlsx-js doesn't support full styles without a premium lib,
+    // but we can at least set column widths and merge header cells)
+    if (!ws1['!merges']) ws1['!merges'] = [];
+    ws1['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }); // title row merge
+
+    XLSX.utils.book_append_sheet(wb, ws1, 'Scorecard');
+
+    // ── Sheet 2: Raw JSON for reference ──────────────────────
+    const rawRows = [['Field', 'Value']];
+    for (const [k, v] of Object.entries(d)) {
+      rawRows.push([k, v]);
+    }
+    const ws2 = XLSX.utils.aoa_to_sheet(rawRows);
+    ws2['!cols'] = [{ wch: 32 }, { wch: 50 }];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Raw Data');
+
+    const filename = `${(d.ticker || currentTicker).replace(/[^a-zA-Z0-9]/g, '_')}_Scorecard_${today.replace(/-/g, '')}.xlsx`;
+    XLSX.writeFile(wb, filename);
+  }
+
+  function resetApp() {
+    extractedData = null;
+    document.getElementById('download-area').style.display = 'none';
+    document.getElementById('status-area').style.display = 'none';
+    document.getElementById('input-card').style.opacity = '1';
+    document.getElementById('input-card').style.pointerEvents = 'auto';
+    document.getElementById('start-btn').disabled = false;
+    document.getElementById('company-name').value = '';
+    document.getElementById('ticker').value = '';
+    document.querySelector('.url-input').value = '';
+    hideError('input-error');
+    hideError('process-error');
+    // reset steps
+    for (let i = 1; i <= 5; i++) {
+      const el = document.getElementById('step-' + i);
+      el.className = 'step-item';
+      el.querySelector('.step-dot').textContent = i;
+    }
+  }
+
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+</script>
+</body>
+</html>
