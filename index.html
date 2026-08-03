@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Stock Signal Scorecard</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -41,11 +41,6 @@
     .remove-btn:hover { border-color:var(--danger); color:var(--danger); }
     .add-link-btn { background:none; border:1px dashed var(--border); border-radius:var(--radius); color:var(--muted); cursor:pointer; font-size:12px; padding:8px 13px; width:100%; margin-top:8px; transition:all 0.15s; font-family:'Inter',sans-serif; }
     .add-link-btn:hover { border-color:var(--accent2); color:var(--accent2); }
-    .input-with-btn { display:flex; gap:8px; }
-    .input-with-btn input { flex:1; min-width:0; }
-    .lookup-btn { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); cursor:pointer; font-family:'Inter',sans-serif; font-size:12px; padding:0 13px; white-space:nowrap; flex-shrink:0; transition:all 0.15s; }
-    .lookup-btn:hover:not(:disabled) { border-color:var(--accent2); color:var(--accent2); }
-    .lookup-btn:disabled { opacity:0.5; cursor:not-allowed; }
     hr { border:none; border-top:1px solid var(--border); margin:20px 0; }
     .steps-row { display:flex; align-items:center; margin-bottom:18px; }
     .step-pill { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--muted); transition:color 0.2s; }
@@ -68,15 +63,16 @@
     #restart-btn:hover { opacity:0.9; }
     #error-box { background:rgba(248,81,73,0.08); border:1px solid rgba(248,81,73,0.35); border-radius:8px; padding:13px 14px; margin-top:12px; display:none; }
     #error-msg { color:var(--danger); font-size:12px; line-height:1.6; word-break:break-word; }
-    /* CHARTS */
-    #charts-section { display:none; margin-bottom:14px; }
-    .chart-tabs { display:flex; gap:4px; margin-bottom:10px; flex-wrap:wrap; }
-    .chart-tab { background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--muted); cursor:pointer; font-family:'Space Grotesk',sans-serif; font-size:11px; font-weight:600; padding:5px 10px; transition:all 0.15s; }
-    .chart-tab.active { background:var(--accent2); border-color:var(--accent2); color:#fff; }
-    .chart-tab:hover:not(.active) { border-color:var(--accent2); color:var(--accent2); }
-    .chart-wrap { background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:12px; position:relative; height:180px; }
-    .chart-loading { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:12px; color:var(--muted); }
-    canvas.price-canvas { width:100%; height:100%; }
+    #diagnose-btn { margin-top:10px; background:none; border:1px solid rgba(248,81,73,0.5); border-radius:6px; color:var(--danger); cursor:pointer; font-family:'Inter',sans-serif; font-size:12px; padding:7px 14px; transition:all 0.15s; }
+    #diagnose-btn:hover { background:rgba(248,81,73,0.1); }
+    #diagnose-btn:disabled { opacity:0.5; cursor:not-allowed; }
+    #diagnose-results { margin-top:12px; display:none; }
+    .diag-item { display:flex; gap:10px; align-items:flex-start; padding:8px 0; border-bottom:1px solid var(--border); font-size:12px; line-height:1.5; }
+    .diag-item:last-child { border-bottom:none; }
+    .diag-icon { font-size:14px; flex-shrink:0; margin-top:1px; }
+    .diag-label { font-weight:600; color:var(--text); }
+    .diag-detail { color:var(--muted); margin-top:2px; }
+    .diag-fix { color:var(--accent2); margin-top:3px; font-style:italic; }
     footer { margin-top:14px; color:var(--muted); font-size:11px; }
   </style>
 </head>
@@ -106,20 +102,25 @@
     <!-- FORM FIELDS (hidden after completion) -->
     <div id="form-fields">
       <div class="field-group" style="margin-bottom:12px;">
-        <label>Search by Company Name <span style="color:var(--muted);font-weight:400;text-transform:none;">(type name, then click Find)</span></label>
-        <div class="input-with-btn">
-          <input type="text" id="company-search" placeholder="e.g. Apple, Nvidia, Shopify…" onkeydown="if(event.key==='Enter'){event.preventDefault();lookupTickerFromName();}" />
-          <button type="button" class="lookup-btn" onclick="lookupTickerFromName()">🔍 Find Ticker</button>
+        <label>Exchange</label>
+        <div style="display:flex;gap:18px;padding-top:2px;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text);cursor:pointer;">
+            <input type="radio" name="exchange" id="exchange-ca" value="CA" checked onchange="onExchangeChange()" /> Canada (TSX)
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text);cursor:pointer;">
+            <input type="radio" name="exchange" id="exchange-us" value="US" onchange="onExchangeChange()" /> United States
+          </label>
         </div>
+      </div>
+      <div class="field-group" style="margin-bottom:12px;">
+        <label>Search by Company Name <span style="color:var(--muted);font-weight:400;text-transform:none;">(type name to find ticker)</span></label>
+        <input type="text" id="company-search" placeholder="e.g. Apple, Nvidia, Shopify…" oninput="onCompanySearchInput()" />
         <div class="hint" id="company-search-hint"></div>
       </div>
       <div class="row-2">
         <div class="field-group narrow">
           <label>Stock Ticker</label>
-          <div class="input-with-btn">
-            <input type="text" id="ticker" placeholder="e.g. GOOG" oninput="onTickerInput()" onkeydown="if(event.key==='Enter'){event.preventDefault();lookupCompanyFromTicker();}" style="text-transform:uppercase;" />
-            <button type="button" class="lookup-btn" onclick="lookupCompanyFromTicker()" title="Look up company name">🔍</button>
-          </div>
+          <input type="text" id="ticker" placeholder="e.g. GOOG" oninput="onTickerInput()" style="text-transform:uppercase;" />
         </div>
         <div class="field-group">
           <label>Company Name</label>
@@ -128,12 +129,8 @@
         </div>
       </div>
       <div class="field-group">
-        <label>Yahoo Finance <span style="color:var(--accent);font-weight:400;text-transform:none;letter-spacing:0;">auto-generated</span></label>
-        <input type="text" id="yahoo-url" readonly class="readonly" style="color:var(--accent2);font-size:12px;" />
-      </div>
-      <div class="field-group">
-        <label>Alpha Vantage API Key <span style="color:var(--accent);font-weight:400;text-transform:none;">(for charts — free at alphavantage.co)</span></label>
-        <input type="text" id="av-key" placeholder="Paste your Alpha Vantage key here" />
+        <label>Yahoo Finance <span style="color:var(--accent);font-weight:400;text-transform:none;letter-spacing:0;">auto-generated, editable</span></label>
+        <input type="text" id="yahoo-url" oninput="onYahooUrlInput()" style="color:var(--accent2);font-size:12px;" />
       </div>
       <div class="field-group">
         <label>Additional Research Links <span style="color:var(--muted);font-weight:400;text-transform:none;">(optional)</span></label>
@@ -168,16 +165,6 @@
       <div style="font-size:12px;color:var(--muted);">Click the button below to download the complete scorecard.</div>
     </div>
 
-    <!-- CHARTS SECTION -->
-    <div id="charts-section">
-      <div class="chart-tabs" id="chart-tabs"></div>
-      <div class="chart-wrap">
-        <div class="chart-loading" id="chart-loading">Loading chart data… (may take ~30s due to API rate limits)</div>
-        <canvas id="price-canvas" style="display:none;"></canvas>
-      </div>
-      <div style="font-size:10px;color:var(--muted);margin-top:5px;text-align:right;">Data: Alpha Vantage</div>
-    </div>
-
     <!-- BUTTONS -->
     <button id="start-btn" onclick="startProcessing()">▶ Start Processing</button>
     <button id="download-btn" onclick="downloadExcel()" style="display:none;">⬇ Download Excel Scorecard</button>
@@ -186,6 +173,8 @@
     <!-- ERROR -->
     <div id="error-box">
       <div id="error-msg"></div>
+      <button id="diagnose-btn" onclick="runDiagnosis()">🔍 Diagnose Problem</button>
+      <div id="diagnose-results"></div>
     </div>
 
   </div>
@@ -195,7 +184,7 @@
 
 <script>
   // ── CONFIG ─────────────────────────────────────────────
-  const HARDCODED_API_KEY = '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';
+  const HARDCODED_API_KEY = 'sk-ant-api03-tRPVINOwtOjTuB6iESNRrvcprm1gJGGWxhSnFKhGLrDbgmOBxJKORyCIM7N16GFmgOMVt1A6Ki8F7Kezx-A-3FigMQAA';
   const WORKER_URL = 'https://stock-screener.gregoryanderchuk.workers.dev/';
   // ───────────────────────────────────────────────────────
 
@@ -205,9 +194,46 @@
   let extraUrlCount = 1;
   let progressTimer = null;
   let progressCurrent = 0;
-  let chartDataCache = {};   // stores fetched OHLCV per period
-  let activeChartPeriod = '1M';
-  let chartCanvasImages = {}; // base64 images for Excel
+  let tickerDebounce = null;
+  let yahooUrlManuallyEdited = false;
+
+  // ── EXCHANGE ──────────────────────────────────────────
+  function getSelectedExchange() {
+    const checked = document.querySelector('input[name="exchange"]:checked');
+    return checked ? checked.value : 'CA'; // default to Canada if nothing selected
+  }
+
+  function extractBaseTicker(raw) {
+    if (!raw) return '';
+    const first = raw.trim().split('.')[0];
+    return first.toUpperCase().replace(/[^A-Z]/g, '');
+  }
+
+  function applyExchangeSuffix(base) {
+    return getSelectedExchange() === 'CA' ? base + '.TO' : base;
+  }
+
+  function onYahooUrlInput() { yahooUrlManuallyEdited = true; }
+
+  function updateYahooUrl(ticker) {
+    if (yahooUrlManuallyEdited) return;
+    const el = document.getElementById('yahoo-url');
+    if (!ticker) { el.value = ''; return; }
+    el.value = getSelectedExchange() === 'CA'
+      ? `https://ca.finance.yahoo.com/quote/${ticker}/`
+      : `https://finance.yahoo.com/quote/${ticker}`;
+  }
+
+  function onExchangeChange() {
+    const cur = document.getElementById('ticker').value.trim();
+    if (!cur) { updateYahooUrl(''); return; }
+    const normalized = applyExchangeSuffix(extractBaseTicker(cur));
+    document.getElementById('ticker').value = normalized;
+    updateYahooUrl(normalized);
+    setHint('resolving', '⏳ Looking up company name…');
+    if (tickerDebounce) clearTimeout(tickerDebounce);
+    tickerDebounce = setTimeout(() => resolveCompanyName(normalized), 400);
+  }
 
   // ── PROGRESS ──────────────────────────────────────────
   function setProgress(pct, label, error) {
@@ -243,18 +269,19 @@
     if (el) el.classList.add(state || 'active');
   }
 
-  // ── COMPANY NAME SEARCH (reverse lookup: name → ticker, button-triggered) ──
-  function lookupTickerFromName() {
+  // ── COMPANY NAME SEARCH (reverse lookup: name → ticker) ──
+  let companySearchDebounce = null;
+
+  function onCompanySearchInput() {
     const q = document.getElementById('company-search').value.trim();
     const hint = document.getElementById('company-search-hint');
-    if (!q || q.length < 2) {
-      hint.className = 'hint error';
-      hint.textContent = 'Type at least 2 characters, then click Find Ticker';
-      return;
-    }
+    hint.className = 'hint';
+    hint.textContent = '';
+    if (companySearchDebounce) clearTimeout(companySearchDebounce);
+    if (!q || q.length < 2) return;
     hint.className = 'hint resolving';
     hint.textContent = '⏳ Looking up ticker…';
-    resolveTickerFromName(q);
+    companySearchDebounce = setTimeout(() => resolveTickerFromName(q), 700);
   }
 
   async function resolveTickerFromName(companyQuery) {
@@ -283,23 +310,24 @@
       raw = raw.trim();
       console.log('Ticker lookup raw:', raw);
 
-      let ticker = '', name = '';
+      let tickerRaw = '', name = '';
 
-      // Strategy 1: pipe format TICKER|Name (preferred)
+      // Strategy 1: pipe format TICKER|Name (preferred) — TICKER may include
+      // a suffix like ".TO", which is handled by extractBaseTicker() below.
       if (raw.includes('|')) {
         const parts = raw.split('|');
-        ticker = parts[0].trim().replace(/[^A-Z.]/g, '');
+        tickerRaw = parts[0].trim();
         name = parts[1] ? parts[1].trim() : '';
       }
 
-      // Strategy 2: scan for uppercase ticker word anywhere in response
-      if (!ticker || ticker.length > 6) {
+      // Strategy 2: scan for an uppercase ticker word anywhere in response
+      if (!tickerRaw) {
         const lines = raw.split('\n');
         for (const line of lines) {
-          const m = line.match(/\b([A-Z]{1,6})\b/);
-          if (m && m[1].length >= 1) {
-            ticker = m[1];
-            name = line.replace(ticker, '').replace(/^[\s|:\-]+/, '').trim();
+          const m = line.match(/\b([A-Z]{1,6}(?:\.[A-Z]{1,3})?)\b/);
+          if (m) {
+            tickerRaw = m[1];
+            name = line.replace(m[0], '').replace(/^[\s|:\-]+/, '').trim();
             if (name.length < 2) name = '';
             break;
           }
@@ -307,20 +335,22 @@
       }
 
       // Strategy 3: if user typed something that looks like a ticker already
-      if (!ticker && /^[A-Za-z]{1,6}$/.test(companyQuery.trim())) {
-        ticker = companyQuery.trim().toUpperCase();
-        name = ticker;
+      if (!tickerRaw && /^[A-Za-z]{1,6}(\.[A-Za-z]{1,3})?$/.test(companyQuery.trim())) {
+        tickerRaw = companyQuery.trim();
+        name = tickerRaw.toUpperCase();
       }
 
-      if (ticker && ticker.length >= 1 && ticker.length <= 6) {
-        if (!name || name.length < 2) name = ticker;
-        document.getElementById('ticker').value = ticker.toUpperCase();
+      const base = extractBaseTicker(tickerRaw);
+
+      if (base && base.length >= 1 && base.length <= 6) {
+        const ticker = applyExchangeSuffix(base);
+        if (!name || name.length < 2) name = base;
+        document.getElementById('ticker').value = ticker;
         document.getElementById('company-name').value = name;
-        document.getElementById('yahoo-url').value = `https://finance.yahoo.com/quote/${ticker.toUpperCase()}`;
+        updateYahooUrl(ticker);
         currentCompany = name;
-        setHint('resolved', '✓ Resolved');
         hint.className = 'hint resolved';
-        hint.textContent = `✓ Found: ${ticker.toUpperCase()} — ${name}`;
+        hint.textContent = `✓ Found: ${ticker} — ${name}`;
       } else {
         hint.className = 'hint error';
         hint.textContent = 'Could not find ticker — try entering the ticker directly in the Stock Ticker field';
@@ -335,19 +365,20 @@
 
   // ── TICKER INPUT ──────────────────────────────────────
   function onTickerInput() {
-    const t = document.getElementById('ticker').value.trim().toUpperCase();
-    document.getElementById('ticker').value = t;
-    document.getElementById('yahoo-url').value = t ? `https://finance.yahoo.com/quote/${t}` : '';
+    const raw = document.getElementById('ticker').value.trim().toUpperCase();
+    document.getElementById('ticker').value = raw;
     document.getElementById('company-name').value = '';
+    yahooUrlManuallyEdited = false;
     setHint('', '');
-  }
-
-  function lookupCompanyFromTicker() {
-    const t = document.getElementById('ticker').value.trim().toUpperCase();
-    if (!t) { setHint('error', 'Enter a ticker first'); return; }
-    document.getElementById('ticker').value = t;
+    if (tickerDebounce) clearTimeout(tickerDebounce);
+    if (!raw) { updateYahooUrl(''); return; }
     setHint('resolving', '⏳ Looking up company name…');
-    resolveCompanyName(t);
+    tickerDebounce = setTimeout(() => {
+      const normalized = applyExchangeSuffix(extractBaseTicker(raw));
+      document.getElementById('ticker').value = normalized;
+      updateYahooUrl(normalized);
+      resolveCompanyName(normalized);
+    }, 700);
   }
 
   function setHint(cls, text) {
@@ -399,6 +430,9 @@
   function showError(msg) {
     document.getElementById('error-msg').textContent = '❌ ' + msg;
     document.getElementById('error-box').style.display = 'block';
+    document.getElementById('diagnose-btn').style.display = 'inline-block';
+    document.getElementById('diagnose-results').style.display = 'none';
+    document.getElementById('diagnose-results').innerHTML = '';
   }
   function hideError() { document.getElementById('error-box').style.display = 'none'; }
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -420,249 +454,22 @@
     } catch (e) {}
   }
 
-  // ── ALPHA VANTAGE CHART DATA ──────────────────────────
-  const CHART_PERIODS = [
-    { id: '1D',  label: '1D',  fn: 'TIME_SERIES_DAILY', type: 'candlestick' },
-    { id: '5D',  label: '5D',  fn: 'TIME_SERIES_DAILY', type: 'candlestick' },
-    { id: '1M',  label: '1M',  fn: 'TIME_SERIES_DAILY',    interval: null,    type: 'candlestick' },
-    { id: '6M',  label: '6M',  fn: 'TIME_SERIES_DAILY',    interval: null,    type: 'candlestick' },
-    { id: '1Y',  label: '1Y',  fn: 'TIME_SERIES_WEEKLY',   interval: null,    type: 'mountain'    },
-    { id: '5Y',  label: '5Y',  fn: 'TIME_SERIES_WEEKLY',   interval: null,    type: 'mountain'    },
-    { id: 'All', label: 'All', fn: 'TIME_SERIES_MONTHLY',  interval: null,    type: 'mountain'    },
-  ];
-
-  async function fetchChartData(ticker, avKey) {
-    chartDataCache = {};
-    chartCanvasImages = {};
-    const base  = 'https://www.alphavantage.co/query';
-    const now   = new Date();
-
-    function parseRows(raw) {
-      return Object.keys(raw).sort().map(d => ({
-        date:  d,
-        open:  parseFloat(raw[d]['1. open']),
-        high:  parseFloat(raw[d]['2. high']),
-        low:   parseFloat(raw[d]['3. low']),
-        close: parseFloat(raw[d]['4. close']),
-      })).filter(r => !isNaN(r.close));
-    }
-
-    function sliceDays(rows, days) {
-      const cutoff = new Date(now);
-      cutoff.setDate(cutoff.getDate() - days);
-      return rows.filter(r => new Date(r.date) >= cutoff);
-    }
-
-    function findTsKey(json) {
-      return Object.keys(json).find(k =>
-        k.includes('Time Series') || k.includes('Weekly') || k.includes('Monthly')
-      );
-    }
-
-    // CALL 1: Daily — covers 1D through 6M
-    try {
-      setProgress(100, 'Loading daily chart data…');
-      const url1 = `${base}?function=TIME_SERIES_DAILY&symbol=${ticker}&outputsize=full&apikey=${avKey}`;
-      console.log('AV Daily URL:', url1);
-      const r1   = await fetch(WORKER_URL, { method:'POST', headers:{'Content-Type':'application/json','x-target-url': url1} });
-      console.log('AV Daily HTTP status:', r1.status);
-      const text1 = await r1.text();
-      console.log('AV Daily raw response (first 300):', text1.slice(0,300));
-      const j1   = JSON.parse(text1);
-      console.log('AV Daily JSON keys:', Object.keys(j1));
-      const key1 = findTsKey(j1);
-      console.log('AV Daily TS key found:', key1);
-      if (key1) {
-        const allDaily = parseRows(j1[key1]);
-        console.log('AV Daily rows parsed:', allDaily.length);
-        const lastDate = allDaily[allDaily.length - 1].date.slice(0, 10);
-        chartDataCache['1D']  = allDaily.filter(r => r.date.slice(0,10) === lastDate);
-        if (!chartDataCache['1D'].length) chartDataCache['1D'] = allDaily.slice(-1);
-        chartDataCache['5D']  = sliceDays(allDaily, 7);
-        chartDataCache['1M']  = sliceDays(allDaily, 31);
-        chartDataCache['6M']  = sliceDays(allDaily, 183);
-        console.log('Cache sizes — 1D:', chartDataCache['1D'].length, '5D:', chartDataCache['5D'].length, '1M:', chartDataCache['1M'].length, '6M:', chartDataCache['6M'].length);
-      } else {
-        console.error('AV Daily: no time series key found. Full response:', JSON.stringify(j1).slice(0,500));
-      }
-    } catch(e) {
-      console.error('Daily fetch failed:', e);
-      ['1D','5D','1M','6M'].forEach(k => chartDataCache[k] = null);
-    }
-
-    await new Promise(r => setTimeout(r, 13000)); // rate limit pause
-
-    // CALL 2: Weekly — covers 1Y, 5Y, All
-    try {
-      setProgress(100, 'Loading weekly chart data…');
-      const url2 = `${base}?function=TIME_SERIES_WEEKLY&symbol=${ticker}&apikey=${avKey}`;
-      console.log('AV Weekly URL:', url2);
-      const r2   = await fetch(WORKER_URL, { method:'POST', headers:{'Content-Type':'application/json','x-target-url': url2} });
-      console.log('AV Weekly HTTP status:', r2.status);
-      const text2 = await r2.text();
-      console.log('AV Weekly raw response (first 300):', text2.slice(0,300));
-      const j2   = JSON.parse(text2);
-      console.log('AV Weekly JSON keys:', Object.keys(j2));
-      const key2 = findTsKey(j2);
-      console.log('AV Weekly TS key found:', key2);
-      if (key2) {
-        const allWeekly = parseRows(j2[key2]);
-        console.log('AV Weekly rows parsed:', allWeekly.length);
-        chartDataCache['1Y']  = sliceDays(allWeekly, 365);
-        chartDataCache['5Y']  = sliceDays(allWeekly, 1825);
-        chartDataCache['All'] = allWeekly;
-      } else {
-        console.error('AV Weekly: no time series key found. Full response:', JSON.stringify(j2).slice(0,500));
-      }
-    } catch(e) {
-      console.error('Weekly fetch failed:', e);
-      ['1Y','5Y','All'].forEach(k => chartDataCache[k] = null);
-    }
-
-    setProgress(100, 'Complete!');
-  }
-
-  // ── CHART RENDERING ───────────────────────────────────
-  function buildChartTabs() {
-    const tabs = document.getElementById('chart-tabs');
-    tabs.innerHTML = '';
-    CHART_PERIODS.forEach(p => {
-      const btn = document.createElement('button');
-      btn.className = 'chart-tab' + (p.id === activeChartPeriod ? ' active' : '');
-      btn.textContent = p.label;
-      btn.onclick = () => switchChart(p.id);
-      tabs.appendChild(btn);
-    });
-  }
-
-  function switchChart(periodId) {
-    activeChartPeriod = periodId;
-    document.querySelectorAll('.chart-tab').forEach(t => {
-      t.classList.toggle('active', t.textContent === periodId);
-    });
-    renderChart(periodId);
-  }
-
-  function renderChart(periodId) {
-    const canvas = document.getElementById('price-canvas');
-    const loading = document.getElementById('chart-loading');
-    const data = chartDataCache[periodId];
-    const period = CHART_PERIODS.find(p => p.id === periodId);
-
-    if (!data || data.length === 0) {
-      loading.textContent = 'No data available for this period.';
-      loading.style.display = 'flex';
-      canvas.style.display = 'none';
-      return;
-    }
-
-    loading.style.display = 'none';
-    canvas.style.display = 'block';
-
-    const wrap = canvas.parentElement;
-    canvas.width = wrap.clientWidth - 24;
-    canvas.height = wrap.clientHeight - 24;
-    const ctx = canvas.getContext('2d');
-    const W = canvas.width, H = canvas.height;
-    const PAD = { top: 20, right: 10, bottom: 30, left: 55 };
-    const plotW = W - PAD.left - PAD.right;
-    const plotH = H - PAD.top - PAD.bottom;
-
-    ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#0d1117';
-    ctx.fillRect(0, 0, W, H);
-
-    const prices = data.flatMap(d => [d.high, d.low]);
-    const minP = Math.min(...prices), maxP = Math.max(...prices);
-    const range = maxP - minP || 1;
-    const toY = p => PAD.top + plotH - ((p - minP) / range) * plotH;
-
-    // Grid lines
-    ctx.strokeStyle = '#30363d'; ctx.lineWidth = 0.5;
-    for (let i = 0; i <= 4; i++) {
-      const y = PAD.top + (plotH / 4) * i;
-      ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + plotW, y); ctx.stroke();
-      const price = maxP - (range / 4) * i;
-      ctx.fillStyle = '#8b949e'; ctx.font = '10px Inter'; ctx.textAlign = 'right';
-      ctx.fillText('$' + price.toFixed(2), PAD.left - 4, y + 4);
-    }
-
-    if (period.type === 'candlestick') {
-      const barW = Math.max(2, Math.floor(plotW / data.length) - 1);
-      data.forEach((d, i) => {
-        const x = PAD.left + (i / data.length) * plotW + barW / 2;
-        const isUp = d.close >= d.open;
-        const color = isUp ? '#2ea043' : '#f85149';
-        // Wick
-        ctx.strokeStyle = color; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(x, toY(d.high)); ctx.lineTo(x, toY(d.low)); ctx.stroke();
-        // Body
-        ctx.fillStyle = color;
-        const bodyTop = toY(Math.max(d.open, d.close));
-        const bodyH = Math.max(1, Math.abs(toY(d.open) - toY(d.close)));
-        ctx.fillRect(x - barW / 2, bodyTop, barW, bodyH);
-      });
-    } else {
-      // Mountain chart
-      ctx.beginPath();
-      ctx.moveTo(PAD.left, toY(data[0].close));
-      data.forEach((d, i) => {
-        ctx.lineTo(PAD.left + (i / (data.length - 1)) * plotW, toY(d.close));
-      });
-      // Fill area
-      const grad = ctx.createLinearGradient(0, PAD.top, 0, PAD.top + plotH);
-      grad.addColorStop(0, 'rgba(56,139,253,0.4)');
-      grad.addColorStop(1, 'rgba(56,139,253,0.02)');
-      ctx.lineTo(PAD.left + plotW, PAD.top + plotH);
-      ctx.lineTo(PAD.left, PAD.top + plotH);
-      ctx.closePath();
-      ctx.fillStyle = grad; ctx.fill();
-      // Line
-      ctx.beginPath();
-      ctx.moveTo(PAD.left, toY(data[0].close));
-      data.forEach((d, i) => {
-        ctx.lineTo(PAD.left + (i / (data.length - 1)) * plotW, toY(d.close));
-      });
-      ctx.strokeStyle = '#388bfd'; ctx.lineWidth = 2; ctx.stroke();
-    }
-
-    // X-axis labels
-    ctx.fillStyle = '#8b949e'; ctx.font = '10px Inter'; ctx.textAlign = 'center';
-    const step = Math.max(1, Math.floor(data.length / 5));
-    for (let i = 0; i < data.length; i += step) {
-      const x = PAD.left + (i / data.length) * plotW;
-      const label = data[i].date.slice(5); // MM-DD or MM-DD HH:mm
-      ctx.fillText(label, x, H - 6);
-    }
-
-    // Save as image for Excel
-    chartCanvasImages[periodId] = canvas.toDataURL('image/png');
-  }
-
-  function renderAllChartsForExcel() {
-    CHART_PERIODS.forEach(p => renderChart(p.id));
-    // restore active tab view
-    renderChart(activeChartPeriod);
-  }
-
   // ── MAIN PROCESSING ───────────────────────────────────
   async function startProcessing() {
     hideError();
     document.getElementById('result-banner').style.display = 'none';
-    document.getElementById('charts-section').style.display = 'none';
 
     const ticker = document.getElementById('ticker').value.trim().toUpperCase();
     const apiKey = HARDCODED_API_KEY;
-    const avKey  = document.getElementById('av-key').value.trim();
 
     if (!ticker) return showError('Please enter a stock ticker.');
     if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') return showError('API key not configured — open the HTML file and replace YOUR_API_KEY_HERE.');
 
     currentTicker = ticker;
-    const yahooUrl  = `https://finance.yahoo.com/quote/${ticker}`;
-    const yahooUrlCA = `https://ca.finance.yahoo.com/quote/${ticker}/`;
+    const yahooUrl  = document.getElementById('yahoo-url').value.trim()
+      || (getSelectedExchange() === 'CA' ? `https://ca.finance.yahoo.com/quote/${ticker}/` : `https://finance.yahoo.com/quote/${ticker}`);
     const extraUrls = Array.from(document.querySelectorAll('.url-input')).map(i => i.value.trim()).filter(Boolean);
-    const allLinks  = [yahooUrl, yahooUrlCA, ...extraUrls];
+    const allLinks  = [yahooUrl, ...extraUrls];
 
     document.getElementById('start-btn').disabled = true;
     document.getElementById('download-btn').style.display = 'none';
@@ -755,20 +562,6 @@ Return only the raw JSON.` }]
       if (progressTimer) clearInterval(progressTimer);
       setProgress(100, 'Complete!');
 
-      // Fetch and render charts if AV key provided
-      if (avKey) {
-        setProgress(100, 'Loading charts…');
-        await fetchChartData(ticker, avKey);
-        activeChartPeriod = '1M';
-        buildChartTabs();
-        document.getElementById('charts-section').style.display = 'block';
-        document.getElementById('chart-loading').style.display = 'flex';
-        document.getElementById('price-canvas').style.display = 'none';
-        await sleep(100); // let DOM paint
-        renderAllChartsForExcel();
-        setProgress(100, 'Complete!');
-      }
-
       playChime();
 
       // Hide form, show results
@@ -793,339 +586,148 @@ Return only the raw JSON.` }]
     }
   }
 
-  // ── EXCEL DOWNLOAD (ExcelJS — matches the uploaded template exactly) ──
-  const TEMPLATE_COLORS = {
-    navy:'FF1B2A4A', navy2:'FF243555', blue:'FF2E4B7A', gold:'FFC9A84C', goldLight:'FFF0D080',
-    headerGray:'FF595959', rowWhite:'FFFFFFFF', rowGray:'FFF5F5F5', inputBlue:'FFEBF3FB',
-    textBlue:'FF0000FF', textBlack:'FF000000', notesGray:'FF595959', link:'FF0563C1',
-    green1:'FF217346', green2:'FF2D7D46', green3:'FF70AD47',
-    neutral:'FFD9D9D9', neutralText:'FF595959',
-    orange:'FFFF7043', red1:'FFE53935', red2:'FFC00000',
-    cfGreenFill:'FFC6EFCE', cfGreenText:'FF217346',
-    cfRedFill:'FFFFC7CE', cfRedText:'FFC00000',
-    cfYellowFill:'FFFFEB9C', cfYellowText:'FF7F6000',
-  };
-  const ROW_HEIGHTS = {1:36,2:18,3:6,4:19.5,5:19.5,6:7.5,7:21.75,8:27.75,9:30,10:30,11:30,12:19.5,13:6,14:21.75,15:27.75,16:30,17:30,18:30,19:19.5,20:6,21:21.75,22:27.75,23:30,24:30,25:30,26:19.5,27:6,28:21.75,29:27.75,30:30,31:30,32:30,33:19.5,34:6,35:21.75,36:27.75,37:30,38:30,39:30,40:19.5,41:9.75,42:25.5,43:25.5,44:9.75,45:21.75,46:21.75,47:21.75,48:21.75,49:21.75,50:21.75,51:21.75,52:21.75,53:9.75,54:19.5,55:24,56:24,57:9.75,58:19.5,59:21.75,60:21.75,61:9.75,62:18,63:18};
-
-  function parseNumeric(x) {
-    if (typeof x === 'number') return x;
-    if (!x) return null;
-    const m = String(x).replace(/,/g,'').match(/-?\d+(\.\d+)?/);
-    return m ? parseFloat(m[0]) : null;
-  }
-
-  function buildScorecardSheet(wb, d, ticker, company, todayRaw) {
-    const C = TEMPLATE_COLORS;
-    const v = x => (x===undefined||x===null||x==='') ? 'N/A' : x;
-    const score = x => { const n = Number(x); return Number.isFinite(n) ? n : 0; };
-
-    const ws = wb.addWorksheet('Scorecard', { views:[{ showGridLines:false }] });
-    ws.properties.defaultColWidth = 42.8164;
-    ws.properties.defaultRowHeight = 14.5;
-    ws.getColumn(1).width = 5.09;
-    Object.entries(ROW_HEIGHTS).forEach(([r,h]) => { ws.getRow(Number(r)).height = h; });
-
-    function cell(ref, value, { fill, font, align, numFmt } = {}) {
-      const c = ws.getCell(ref);
-      c.value = value;
-      c.font = Object.assign({ name:'Arial', size:10 }, font || {});
-      if (fill) c.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: fill } };
-      c.alignment = Object.assign({ vertical:'middle', wrapText:true }, align || {});
-      if (numFmt) c.numFmt = numFmt;
-      return c;
+  // ── DIAGNOSE ──────────────────────────────────────────
+  async function runDiagnosis() {
+    const btn = document.getElementById('diagnose-btn');
+    btn.disabled = true; btn.textContent = '🔍 Diagnosing…';
+    const results = document.getElementById('diagnose-results');
+    results.style.display = 'block';
+    results.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0;">Running diagnostics…</div>';
+    const checks = [], apiKey = HARDCODED_API_KEY;
+    try {
+      await fetch('https://www.google.com/favicon.ico', { mode:'no-cors', signal:AbortSignal.timeout(4000) });
+      checks.push({ icon:'✅', label:'Internet connection', detail:'Your browser can reach the internet.', fix:null });
+    } catch { checks.push({ icon:'❌', label:'Internet connection', detail:'Cannot reach the internet.', fix:'Check your network connection.' }); }
+    try {
+      const r = await fetch(WORKER_URL, { method:'POST', headers:{'Content-Type':'application/json','x-api-key':'test','anthropic-version':'2023-06-01'}, body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:10,messages:[{role:'user',content:'hi'}]}), signal:AbortSignal.timeout(8000) });
+      const d = await r.json();
+      if (d.error?.type==='authentication_error') checks.push({ icon:'✅', label:'Cloudflare Worker', detail:'Worker is reachable and forwarding correctly.', fix:null });
+      else checks.push({ icon:'⚠️', label:'Cloudflare Worker', detail:'Unexpected response: '+JSON.stringify(d).slice(0,80), fix:'Try re-deploying the Worker.' });
+    } catch { checks.push({ icon:'❌', label:'Cloudflare Worker', detail:'Cannot reach '+WORKER_URL, fix:'Go to Cloudflare → Workers & Pages → check it is deployed.' }); }
+    if (!apiKey||apiKey==='YOUR_API_KEY_HERE') {
+      checks.push({ icon:'❌', label:'Anthropic API Key', detail:'Still set to placeholder.', fix:'Open the HTML file and replace YOUR_API_KEY_HERE.' });
+    } else {
+      try {
+        const r = await fetch(WORKER_URL, { method:'POST', headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01'}, body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:10,messages:[{role:'user',content:'hi'}]}), signal:AbortSignal.timeout(10000) });
+        const d = await r.json();
+        if (d.error?.type==='authentication_error') checks.push({ icon:'❌', label:'Anthropic API Key', detail:'Key rejected — may be revoked.', fix:'Go to console.anthropic.com → API Keys → create a new one.' });
+        else if (d.content||d.error?.type==='invalid_request_error') checks.push({ icon:'✅', label:'Anthropic API Key', detail:'Key is valid and accepted.', fix:null });
+        else checks.push({ icon:'⚠️', label:'Anthropic API Key', detail:'Unexpected: '+JSON.stringify(d).slice(0,80), fix:'Try a new API key.' });
+      } catch { checks.push({ icon:'⚠️', label:'Anthropic API Key', detail:'Could not verify — Worker may be down.', fix:null }); }
     }
-    const merge = range => ws.mergeCells(range);
-
-    // ===== TITLE =====
-    merge('B1:E1');
-    cell('B1', 'STOCK SIGNAL SCORECARD', { fill:C.navy, font:{ name:'Arial', size:20, bold:true, color:{argb:C.gold} }, align:{ horizontal:'center' } });
-    merge('B2:E2');
-    cell('B2', 'Weight-of-Evidence System  •  Rate each signal: +1 (Bullish) | 0 (Neutral) | −1 (Bearish)', { fill:C.navy2, font:{ name:'Arial', size:10, color:{argb:C.goldLight} }, align:{ horizontal:'center' } });
-
-    // ===== HEADER FIELDS =====
-    const labelStyle = { font:{ name:'Arial', size:10, bold:true, color:{argb:C.navy} }, align:{ horizontal:'right' } };
-    const inputStyle = { fill:C.inputBlue, font:{ name:'Calibri', size:11, color:{argb:C.textBlack} }, align:{ horizontal:'left' } };
-    cell('B4', 'Company Name:', labelStyle);
-    cell('C4', company, inputStyle);
-    cell('D4', 'Date:', labelStyle);
-    let dateVal = todayRaw, dateFmt;
-    const parsedDate = new Date(todayRaw);
-    if (!isNaN(parsedDate) && /\d{4}/.test(String(todayRaw))) { dateVal = parsedDate; dateFmt = 'mm-dd-yy'; }
-    cell('E4', dateVal, Object.assign({}, inputStyle, { numFmt: dateFmt }));
-
-    cell('B5', 'Stock Ticker:', labelStyle);
-    cell('C5', ticker, inputStyle);
-    cell('D5', 'Link to chart:', labelStyle);
-    const chartUrl = `https://finance.yahoo.com/quote/${ticker}`;
-    const e5 = cell('E5', { text: chartUrl, hyperlink: chartUrl }, { fill:C.inputBlue, font:{ name:'Calibri', size:11, color:{argb:C.link}, underline:true }, align:{ horizontal:'left' } });
-
-    // ===== LAYER BUILDER =====
-    function layerBlock(headerRow, title, signals, layerNum) {
-      const colHeaderRow = headerRow + 1;
-      const firstDataRow = headerRow + 2;
-      const subtotalRow = headerRow + 5;
-
-      merge(`B${headerRow}:E${headerRow}`);
-      cell(`B${headerRow}`, `  LAYER ${layerNum} — ${title}`, { fill:C.blue, font:{ name:'Arial', size:11, bold:true, color:{argb:'FFFFFFFF'} }, align:{ horizontal:'left' } });
-
-      ['Signal / Indicator','Your Observation','Score\n(+1/0/−1)','Notes'].forEach((txt,i) => {
-        cell(`${'BCDE'[i]}${colHeaderRow}`, txt, { fill:C.headerGray, font:{ name:'Arial', size:9, bold:true, color:{argb:'FFFFFFFF'} }, align:{ horizontal:'center' } });
-      });
-
-      signals.forEach((sig, i) => {
-        const row = firstDataRow + i;
-        const stripe = i % 2 === 0 ? C.rowGray : C.rowWhite;
-        cell(`B${row}`, sig.label, { fill:stripe, font:{ name:'Arial', size:10, color:{argb:C.textBlack} }, align:{ horizontal:'left' } });
-        cell(`C${row}`, v(sig.observation), { fill:C.inputBlue, font:{ name:'Arial', size:10, color:{argb:C.textBlue} }, align:{ horizontal:'left' } });
-        cell(`D${row}`, score(sig.score), { fill:C.inputBlue, font:{ name:'Arial', size:11, bold:true, color:{argb:C.textBlue} }, align:{ horizontal:'center' } });
-        cell(`E${row}`, sig.note, { fill:stripe, font:{ name:'Arial', size:9, color:{argb:C.notesGray} }, align:{ horizontal:'left' } });
-      });
-
-      merge(`B${subtotalRow}:C${subtotalRow}`);
-      cell(`B${subtotalRow}`, `Layer ${layerNum} Subtotal`, { fill:C.navy2, font:{ name:'Arial', size:10, bold:true, color:{argb:'FFFFFFFF'} }, align:{ horizontal:'right' } });
-      cell(`D${subtotalRow}`, { formula: `SUM(D${firstDataRow}:D${firstDataRow+2})` }, { fill:C.navy2, font:{ name:'Arial', size:11, bold:true, color:{argb:'FFFFFFFF'} }, align:{ horizontal:'center' } });
-      cell(`E${subtotalRow}`, 'Max: +3  |  Min: −3', { fill:C.navy2, font:{ name:'Arial', size:9, color:{argb:C.goldLight} }, align:{ horizontal:'left' } });
-
-      // conditional formatting on this layer's score range
-      ws.addConditionalFormatting({
-        ref: `D${firstDataRow}:D${firstDataRow+2}`,
-        rules: [
-          { type:'cellIs', operator:'equal', formulae:['1'], style:{ fill:{ type:'pattern', pattern:'solid', fgColor:{argb:C.cfGreenFill} }, font:{ bold:true, color:{argb:C.cfGreenText} } } },
-          { type:'cellIs', operator:'equal', formulae:['-1'], style:{ fill:{ type:'pattern', pattern:'solid', fgColor:{argb:C.cfRedFill} }, font:{ bold:true, color:{argb:C.cfRedText} } } },
-          { type:'cellIs', operator:'equal', formulae:['0'], style:{ fill:{ type:'pattern', pattern:'solid', fgColor:{argb:C.cfYellowFill} }, font:{ bold:true, color:{argb:C.cfYellowText} } } },
-        ]
-      });
-      return subtotalRow;
-    }
-
-    const l1 = d.layer1 || {}, l2 = d.layer2 || {}, l3 = d.layer3 || {}, l4 = d.layer4 || {}, l5 = d.layer5 || {};
-    layerBlock(7, 'TREND  (Is the stock moving in a direction?)', [
-      { label:'Price above 50-day Moving Average?', observation:l1.price_above_50ma?.observation, score:l1.price_above_50ma?.score, note:'Pull from TradingView or Yahoo Finance chart' },
-      { label:'50-day MA above 200-day MA? (Golden/Death Cross)', observation:l1.ma_50_above_200?.observation, score:l1.ma_50_above_200?.score, note:'Golden Cross = bullish; Death Cross = bearish' },
-      { label:'Making higher highs & higher lows?', observation:l1.higher_highs_lows?.observation, score:l1.higher_highs_lows?.score, note:'Look at 3-month chart structure' },
-    ], 1);
-    layerBlock(14, 'MOMENTUM  (Is the trend accelerating or fading?)', [
-      { label:'RSI level (50–70 = healthy uptrend)', observation:l2.rsi?.observation, score:l2.rsi?.score, note:'RSI >70 = overbought (−1); 50–70 = bullish (+1); <50 = bearish (−1)' },
-      { label:'MACD line above signal line?', observation:l2.macd?.observation, score:l2.macd?.score, note:'Bullish crossover = +1; bearish crossover = −1' },
-      { label:'Volume rising on up-days, falling on down-days?', observation:l2.volume?.observation, score:l2.volume?.score, note:'Confirms conviction behind move' },
-    ], 2);
-    layerBlock(21, 'FUNDAMENTALS  (Does the business support the move?)', [
-      { label:'Recent earnings beat or miss vs. expectations?', observation:l3.earnings?.observation, score:l3.earnings?.score, note:'Beat = +1; In-line = 0; Miss = −1' },
-      { label:'Revenue growth trend (accelerating / slowing)?', observation:l3.revenue_growth?.observation, score:l3.revenue_growth?.score, note:'Check last 2-4 quarters on Finviz or Macrotrends' },
-      { label:'Upcoming catalyst in next 1–2 weeks?', observation:l3.catalyst?.observation, score:l3.catalyst?.score, note:'Earnings, FDA decision, product launch, Fed meeting' },
-    ], 3);
-    layerBlock(28, 'SENTIMENT & POSITIONING  (Where is smart money?)', [
-      { label:'Analyst consensus (Buy / Hold / Sell ratings)?', observation:l4.analyst_consensus?.observation, score:l4.analyst_consensus?.score, note:'Majority Buy = +1; mixed = 0; majority Sell = −1. Check Finviz' },
-      { label:'Short interest level (high float short = squeeze risk)?', observation:l4.short_interest?.observation, score:l4.short_interest?.score, note:'High short interest + upward price = potential squeeze (+1)' },
-      { label:'Unusual options activity (calls vs. puts)?', observation:l4.options_activity?.observation, score:l4.options_activity?.score, note:'Large call buying = bullish signal. Check Unusual Whales / Barchart' },
-    ], 4);
-    layerBlock(35, 'MARKET CONTEXT  (Is the tide rising or falling?)', [
-      { label:'S&P 500 / Nasdaq in uptrend?', observation:l5.sp500_trend?.observation, score:l5.sp500_trend?.score, note:'Broad market direction matters — most stocks follow the index' },
-      { label:"Stock's sector outperforming the market?", observation:l5.sector_performance?.observation, score:l5.sector_performance?.score, note:'Check Finviz sector map or ETF relative strength' },
-      { label:'VIX (Fear Index) low and stable?', observation:l5.vix?.observation, score:l5.vix?.score, note:'VIX <20 = calm (+1); 20–30 = cautious (0); >30 = fearful (−1)' },
-    ], 5);
-
-    // ===== TOTAL SCORE =====
-    merge('B42:C43');
-    cell('B42', 'TOTAL SCORE', { fill:C.navy, font:{ name:'Arial', size:16, bold:true, color:{argb:'FFFFFFFF'} }, align:{ horizontal:'center' } });
-    merge('D42:D43');
-    cell('D42', { formula: 'SUM(D12,D19,D26,D33,D40)' }, { fill:C.navy, font:{ name:'Arial', size:24, bold:true, color:{argb:C.gold} }, align:{ horizontal:'center' } });
-    merge('E42:E43');
-    cell('E42', 'Max: +15  |  Min: −15', { fill:C.navy, font:{ name:'Arial', size:10, color:{argb:C.goldLight} }, align:{ horizontal:'center' } });
-    ws.addConditionalFormatting({
-      ref: 'D42:D43',
-      rules: [
-        { type:'cellIs', operator:'greaterThanOrEqual', formulae:['5'], style:{ fill:{ type:'pattern', pattern:'solid', fgColor:{argb:C.cfGreenFill} }, font:{ bold:true, color:{argb:C.cfGreenText} } } },
-        { type:'cellIs', operator:'lessThanOrEqual', formulae:['-5'], style:{ fill:{ type:'pattern', pattern:'solid', fgColor:{argb:C.cfRedFill} }, font:{ bold:true, color:{argb:C.cfRedText} } } },
-      ]
-    });
-
-    // ===== SIGNAL INTERPRETATION =====
-    merge('B45:E45');
-    cell('B45', 'SIGNAL INTERPRETATION', { fill:C.blue, font:{ name:'Arial', size:11, bold:true, color:{argb:'FFFFFFFF'} }, align:{ horizontal:'center' } });
-    const bands = [
-      { row:46, range:'+10 to +15', label:'STRONG BUY', color:C.green1, note:'Multiple layers confirm bullish thesis. Consider adding/holding.' },
-      { row:47, range:'+5 to +9',   label:'BULLISH', color:C.green2, note:'Good signal — hold position, monitor closely.' },
-      { row:48, range:'+1 to +4',   label:'MILD BULLISH', color:C.green3, note:'Lean bullish but mixed evidence. Watch for confirmation.' },
-      { row:49, range:'−1 to 0',    label:'NEUTRAL', color:C.neutral, textColor:C.neutralText, note:'No clear edge. Sit on hands — protect capital.' },
-      { row:50, range:'−2 to −4',   label:'MILD BEARISH', color:C.orange, note:'More negatives than positives. Tighten stop-loss.' },
-      { row:51, range:'−5 to −9',   label:'BEARISH', color:C.red1, note:'Multiple warning signs. Reduce exposure or hedge.' },
-      { row:52, range:'−10 to −15', label:'STRONG SELL', color:C.red2, note:'Majority of signals negative. Consider exiting position.' },
-    ];
-    bands.forEach((b,i) => {
-      const badgeFont = { name:'Arial', size:10, bold:true, color:{argb: b.textColor || 'FFFFFFFF'} };
-      cell(`B${b.row}`, b.range, { fill:b.color, font:badgeFont, align:{ horizontal:'center' } });
-      cell(`C${b.row}`, b.label, { fill:b.color, font:badgeFont, align:{ horizontal:'center' } });
-      merge(`D${b.row}:E${b.row}`);
-      cell(`D${b.row}`, b.note, { fill: i % 2 === 0 ? C.rowGray : C.rowWhite, font:{ name:'Arial', size:9, color:{argb:C.notesGray} }, align:{ horizontal:'left' } });
-    });
-
-    // ===== THESIS =====
-    merge('B54:E54');
-    cell('B54', "ONE-SENTENCE THESIS  (If you can't state it clearly, reconsider the trade)", { fill:C.blue, font:{ name:'Arial', size:10, bold:true, color:{argb:'FFFFFFFF'} }, align:{ horizontal:'left' } });
-    merge('B55:E56');
-    cell('B55', v(d.one_sentence_thesis), { fill:C.inputBlue, font:{ name:'Arial', size:11, color:{argb:C.textBlue} }, align:{ horizontal:'left', vertical:'top' } });
-
-    // ===== RISK MANAGEMENT =====
-    merge('B58:E58');
-    cell('B58', 'RISK MANAGEMENT', { fill:C.blue, font:{ name:'Arial', size:10, bold:true, color:{argb:'FFFFFFFF'} }, align:{ horizontal:'left' } });
-    cell('B59', 'Current Price ($):', labelStyle);
-    cell('C59', parseNumeric(d.current_price) ?? v(d.current_price), { fill:C.inputBlue, font:{ name:'Arial', size:10, color:{argb:C.textBlue} }, align:{ horizontal:'center' } });
-    cell('D59', 'Stop-Loss Price ($):', labelStyle);
-    cell('E59', parseNumeric(d.stop_loss) ?? v(d.stop_loss), { fill:C.inputBlue, font:{ name:'Arial', size:10, color:{argb:C.textBlue} }, align:{ horizontal:'center' } });
-    cell('B60', 'Price Target ($):', labelStyle);
-    cell('C60', parseNumeric(d.target_price_mean) ?? v(d.target_price_mean), { fill:C.inputBlue, font:{ name:'Arial', size:10, color:{argb:C.textBlue} }, align:{ horizontal:'center' } });
-    cell('D60', 'Risk/Reward Ratio:', labelStyle);
-    cell('E60', { formula: 'IF(AND(ISNUMBER(C59),ISNUMBER(E59),ISNUMBER(C60),C59<>E59),(C60-C59)/(C59-E59),"—")' }, { fill:C.inputBlue, font:{ name:'Arial', size:11, bold:true, color:{argb:C.textBlack} }, align:{ horizontal:'center' }, numFmt:'0.0"x"' });
-
-    // ===== DISCLAIMER =====
-    merge('B62:E63');
-    cell('B62', '⚠  DISCLAIMER: This scorecard is for informational purposes only and does not constitute financial advice. No system can reliably predict short-term stock movements. Always do your own research and consider consulting a licensed financial advisor before making investment decisions.', { fill:C.neutral, font:{ name:'Arial', size:8, color:{argb:C.neutralText} }, align:{ horizontal:'center', vertical:'top' } });
+    results.innerHTML = checks.map(c=>`<div class="diag-item"><span class="diag-icon">${c.icon}</span><div><div class="diag-label">${c.label}</div><div class="diag-detail">${c.detail}</div>${c.fix?`<div class="diag-fix">→ ${c.fix}</div>`:''}</div></div>`).join('');
+    btn.disabled = false; btn.textContent = '🔍 Re-run Diagnosis';
   }
 
-  function buildFinancialDataSheet(wb, d, ticker, company, today) {
-    const v = x => (x===undefined||x===null||x==='') ? 'N/A' : x;
-    const ws = wb.addWorksheet('Financial Data');
-    ws.columns = [{ width:28 },{ width:58 }];
-    const sectionStyle = { font:{ name:'Arial', size:11, bold:true, color:{argb:'FFFFFFFF'} }, fill:{ type:'pattern', pattern:'solid', fgColor:{argb:'FF2E4B7A'} } };
-    const labelStyle = { font:{ name:'Arial', size:10, bold:true } };
-    const rows = [
-      ['FINANCIAL DATA','', true], ['Company',company], ['Ticker',ticker], ['Date',today],
-      ['Exchange',v(d.exchange)], ['Sector',v(d.sector)], ['Industry',v(d.industry)],
-      ['PRICE & VALUATION','', true], ['Current Price',v(d.current_price)], ['52-Week High',v(d['52w_high'])],
-      ['52-Week Low',v(d['52w_low'])], ['Market Cap',v(d.market_cap)], ['P/E Ratio (TTM)',v(d.pe_ratio)],
-      ['Forward P/E',v(d.forward_pe)], ['EPS (TTM)',v(d.eps_ttm)], ['EPS (Next Year Est.)',v(d.eps_next_year)],
-      ['Beta',v(d.beta)],
-      ['FINANCIAL PERFORMANCE','', true], ['Revenue (TTM)',v(d.revenue_ttm)],
-      ['Revenue Growth YoY',v(d.revenue_growth_yoy)], ['Gross Margin',v(d.gross_margin)],
-      ['Operating Margin',v(d.operating_margin)], ['Profit Margin',v(d.profit_margin)],
-      ['EBITDA',v(d.ebitda)], ['Free Cash Flow',v(d.free_cash_flow)],
-      ['BALANCE SHEET','', true], ['Debt/Equity',v(d.debt_to_equity)], ['Current Ratio',v(d.current_ratio)],
-      ['ROE',v(d.roe)], ['ROA',v(d.roa)],
-      ['DIVIDENDS','', true], ['Dividend Yield',v(d.dividend_yield)], ['Payout Ratio',v(d.payout_ratio)],
-      ['ANALYST COVERAGE','', true], ['Recommendation',v(d.analyst_recommendation)],
-      ['Price Target – Low',v(d.target_price_low)], ['Price Target – Mean',v(d.target_price_mean)],
-      ['Price Target – High',v(d.target_price_high)], ['# of Analysts',v(d.num_analysts)],
-      ['OWNERSHIP & FLOAT','', true], ['Short Interest',v(d.short_interest)],
-      ['Institutional Ownership',v(d.institutional_ownership)], ['Insider Ownership',v(d.insider_ownership)],
-      ['Avg Volume',v(d.avg_volume)],
-      ['TECHNICALS','', true], ['Technical Trend',v(d.technical_trend)],
-      ['Support Level',v(d.support_level)], ['Resistance Level',v(d.resistance_level)],
-      ['RSI (14)',v(d.rsi_14)], ['50-Day MA',v(d.moving_avg_50d)], ['200-Day MA',v(d.moving_avg_200d)],
-      ['ANALYST NOTES','', true], ['Summary',v(d.summary_notes)],
-    ];
-    rows.forEach(([label, value, isSection]) => {
-      const row = ws.addRow(isSection ? [label,''] : [label, value]);
-      if (isSection) { row.getCell(1).style = sectionStyle; row.getCell(2).style = sectionStyle; ws.mergeCells(`A${row.number}:B${row.number}`); row.getCell(1).alignment = { horizontal:'left' }; }
-      else { row.getCell(1).style = labelStyle; row.getCell(2).alignment = { wrapText:true }; }
-    });
-  }
-
-  // Build a text sparkline visual using block characters for the price trend
-  function buildSparkline(chartData, width) {
-    if (!chartData || !chartData.length) return '';
-    const closes = chartData.map(r => r.close);
-    const minC = Math.min(...closes), maxC = Math.max(...closes);
-    const range = maxC - minC || 1;
-    const bars = ['▁','▂','▃','▄','▅','▆','▇','█'];
-    const step = Math.max(1, Math.floor(closes.length / width));
-    const sampled = [];
-    for (let i = 0; i < closes.length; i += step) sampled.push(closes[i]);
-    return sampled.map(c => bars[Math.min(7, Math.floor(((c - minC) / range) * 8))]).join('');
-  }
-
-  function buildPriceRows(chartData, width) {
-    if (!chartData || !chartData.length) return [];
-    const closes = chartData.map(r => r.close);
-    const minC = Math.min(...closes), maxC = Math.max(...closes);
-    const range = maxC - minC || 1;
-    const step = Math.max(1, Math.floor(closes.length / width));
-    const sampled = [];
-    for (let i = 0; i < closes.length; i += step) sampled.push(closes[i]);
-    const rows = [];
-    for (let row = 7; row >= 0; row--) {
-      const threshold = minC + (range / 8) * (row + 0.5);
-      const priceLabel = row === 7 ? '$' + maxC.toFixed(2) : row === 0 ? '$' + minC.toFixed(2) : '';
-      const line = sampled.map(c => c >= threshold ? '█' : '░').join('');
-      rows.push([priceLabel, line]);
-    }
-    return rows;
-  }
-
-  function buildChartSheets(wb, ticker) {
-    CHART_PERIODS.forEach(period => {
-      const chartData = chartDataCache[period.id];
-      if (!chartData || !chartData.length) return;
-
-      const chartType = period.type === 'candlestick' ? 'Candlestick' : 'Mountain';
-      const sparkline = buildSparkline(chartData, 80);
-      const priceRows = buildPriceRows(chartData, 80);
-      const minC = Math.min(...chartData.map(r => r.close));
-      const maxC = Math.max(...chartData.map(r => r.close));
-      const firstC = chartData[0].close;
-      const lastC  = chartData[chartData.length - 1].close;
-      const change = ((lastC - firstC) / firstC * 100).toFixed(2);
-      const direction = lastC >= firstC ? '▲' : '▼';
-
-      const ws = wb.addWorksheet(`Chart ${period.label}`);
-      ws.columns = [{ width:14 },{ width:82 },{ width:12 },{ width:12 },{ width:12 }];
-      ws.addRow([`${ticker} — ${period.label} ${chartType} Chart`]).font = { bold:true };
-      ws.addRow([`Period: ${period.label}  |  From: ${chartData[0].date.slice(0,10)}  To: ${chartData[chartData.length-1].date.slice(0,10)}`]);
-      ws.addRow([`High: $${maxC.toFixed(2)}   Low: $${minC.toFixed(2)}   Last: $${lastC.toFixed(2)}   Change: ${direction} ${change}%`]);
-      ws.addRow([]);
-      ws.addRow(['PRICE TREND (text chart):']);
-      priceRows.forEach(r => { ws.addRow(r).eachCell(c => { c.font = { name:'Courier New', size:9 }; }); });
-      ws.addRow([]);
-      const sparkRow = ws.addRow(['SPARKLINE:', sparkline]);
-      sparkRow.getCell(2).font = { name:'Courier New', size:9 };
-      ws.addRow([]);
-      ws.addRow(['DATE','OPEN','HIGH','LOW','CLOSE']).font = { bold:true };
-      chartData.forEach(r => ws.addRow([r.date.slice(0,10), r.open, r.high, r.low, r.close]));
-    });
-  }
-
-  async function downloadExcel() {
+  // ── EXCEL DOWNLOAD ────────────────────────────────────
+  function downloadExcel() {
     if (!extractedData) return;
     const d = extractedData;
     const today = d.date || new Date().toLocaleDateString('en-CA');
     const ticker = d.ticker || currentTicker;
     const company = d.company_name || currentCompany;
-    const btn = document.getElementById('download-btn');
-    const originalLabel = btn.textContent;
-    btn.disabled = true; btn.textContent = 'Building workbook…';
-    try {
-      const wb = new ExcelJS.Workbook();
-      wb.creator = 'Stock Signal Scorecard';
-      wb.created = new Date();
-      buildScorecardSheet(wb, d, ticker, company, today);
-      buildFinancialDataSheet(wb, d, ticker, company, today);
-      buildChartSheets(wb, ticker);
+    const s = n => (n===1?'+1':n===-1?'-1':'0');
+    const v = x => x||'N/A';
+    const wb = XLSX.utils.book_new();
 
-      const buffer = await wb.xlsx.writeBuffer();
-      const blob = new Blob([buffer], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${ticker}_Scorecard_${String(today).replace(/[^0-9]/g,'')}.xlsx`;
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      showError('Could not build the Excel file: ' + (e.message || e));
-    } finally {
-      btn.disabled = false; btn.textContent = originalLabel;
-    }
+    // SHEET 1: FINANCIAL DATA
+    const fd = [
+      ['FINANCIAL DATA',''],['Company',company],['Ticker',ticker],['Date',today],
+      ['Exchange',v(d.exchange)],['Sector',v(d.sector)],['Industry',v(d.industry)],['',''],
+      ['PRICE & VALUATION',''],['Current Price',v(d.current_price)],['52-Week High',v(d['52w_high'])],
+      ['52-Week Low',v(d['52w_low'])],['Market Cap',v(d.market_cap)],['P/E Ratio (TTM)',v(d.pe_ratio)],
+      ['Forward P/E',v(d.forward_pe)],['EPS (TTM)',v(d.eps_ttm)],['EPS (Next Year Est.)',v(d.eps_next_year)],
+      ['Beta',v(d.beta)],['',''],['FINANCIAL PERFORMANCE',''],['Revenue (TTM)',v(d.revenue_ttm)],
+      ['Revenue Growth YoY',v(d.revenue_growth_yoy)],['Gross Margin',v(d.gross_margin)],
+      ['Operating Margin',v(d.operating_margin)],['Profit Margin',v(d.profit_margin)],
+      ['EBITDA',v(d.ebitda)],['Free Cash Flow',v(d.free_cash_flow)],['',''],
+      ['BALANCE SHEET',''],['Debt/Equity',v(d.debt_to_equity)],['Current Ratio',v(d.current_ratio)],
+      ['ROE',v(d.roe)],['ROA',v(d.roa)],['',''],['DIVIDENDS',''],
+      ['Dividend Yield',v(d.dividend_yield)],['Payout Ratio',v(d.payout_ratio)],['',''],
+      ['ANALYST COVERAGE',''],['Recommendation',v(d.analyst_recommendation)],
+      ['Price Target – Low',v(d.target_price_low)],['Price Target – Mean',v(d.target_price_mean)],
+      ['Price Target – High',v(d.target_price_high)],['# of Analysts',v(d.num_analysts)],['',''],
+      ['OWNERSHIP & FLOAT',''],['Short Interest',v(d.short_interest)],
+      ['Institutional Ownership',v(d.institutional_ownership)],['Insider Ownership',v(d.insider_ownership)],
+      ['Avg Volume',v(d.avg_volume)],['',''],['TECHNICALS',''],['Technical Trend',v(d.technical_trend)],
+      ['Support Level',v(d.support_level)],['Resistance Level',v(d.resistance_level)],
+      ['RSI (14)',v(d.rsi_14)],['50-Day MA',v(d.moving_avg_50d)],['200-Day MA',v(d.moving_avg_200d)],
+      ['',''],['ANALYST NOTES',''],['Summary',v(d.summary_notes)],
+    ];
+    const ws1 = XLSX.utils.aoa_to_sheet(fd);
+    ws1['!cols'] = [{wch:28},{wch:58}];
+    XLSX.utils.book_append_sheet(wb, ws1, 'Financial Data');
+
+    // SHEET 2: SCORECARD
+    const sc = [
+      ['STOCK SIGNAL SCORECARD','','',''],
+      ['Weight-of-Evidence System  •  +1 (Bullish) | 0 (Neutral) | −1 (Bearish)','','',''],
+      ['Company Name:',company,'Date:',today],
+      ['Stock Ticker:',ticker,'Link to chart:',document.getElementById('yahoo-url').value.trim() || `https://finance.yahoo.com/quote/${ticker}`],['','','',''],
+      ['  LAYER 1 — TREND','','',''],
+      ['Signal / Indicator','Your Observation','Score  (+1/0/−1)','Notes'],
+      ['Price above 50-day Moving Average?',v(d.layer1?.price_above_50ma?.observation),s(d.layer1?.price_above_50ma?.score),'Pull from TradingView or Yahoo Finance chart'],
+      ['50-day MA above 200-day MA? (Golden/Death Cross)',v(d.layer1?.ma_50_above_200?.observation),s(d.layer1?.ma_50_above_200?.score),'Golden Cross = bullish; Death Cross = bearish'],
+      ['Making higher highs & higher lows?',v(d.layer1?.higher_highs_lows?.observation),s(d.layer1?.higher_highs_lows?.score),'Look at 3-month chart structure'],
+      ['Layer 1 Subtotal','',d.layer1?.subtotal??'','Max: +3  |  Min: −3'],['','','',''],
+      ['  LAYER 2 — MOMENTUM','','',''],
+      ['Signal / Indicator','Your Observation','Score  (+1/0/−1)','Notes'],
+      ['RSI level (50–70 = healthy uptrend)',v(d.layer2?.rsi?.observation),s(d.layer2?.rsi?.score),'RSI >70=overbought; 50–70=bullish; <50=bearish'],
+      ['MACD line above signal line?',v(d.layer2?.macd?.observation),s(d.layer2?.macd?.score),'Bullish crossover=+1; bearish crossover=−1'],
+      ['Volume rising on up-days, falling on down-days?',v(d.layer2?.volume?.observation),s(d.layer2?.volume?.score),'Confirms conviction behind move'],
+      ['Layer 2 Subtotal','',d.layer2?.subtotal??'','Max: +3  |  Min: −3'],['','','',''],
+      ['  LAYER 3 — FUNDAMENTALS','','',''],
+      ['Signal / Indicator','Your Observation','Score  (+1/0/−1)','Notes'],
+      ['Recent earnings beat or miss vs. expectations?',v(d.layer3?.earnings?.observation),s(d.layer3?.earnings?.score),'Beat=+1; In-line=0; Miss=−1'],
+      ['Revenue growth trend (accelerating / slowing)?',v(d.layer3?.revenue_growth?.observation),s(d.layer3?.revenue_growth?.score),'Check last 2-4 quarters'],
+      ['Upcoming catalyst in next 1–2 weeks?',v(d.layer3?.catalyst?.observation),s(d.layer3?.catalyst?.score),'Earnings, product launch, regulatory decision'],
+      ['Layer 3 Subtotal','',d.layer3?.subtotal??'','Max: +3  |  Min: −3'],['','','',''],
+      ['  LAYER 4 — SENTIMENT & POSITIONING','','',''],
+      ['Signal / Indicator','Your Observation','Score  (+1/0/−1)','Notes'],
+      ['Analyst consensus (Buy / Hold / Sell ratings)?',v(d.layer4?.analyst_consensus?.observation),s(d.layer4?.analyst_consensus?.score),'Majority Buy=+1; mixed=0; majority Sell=−1'],
+      ['Short interest level?',v(d.layer4?.short_interest?.observation),s(d.layer4?.short_interest?.score),'High short interest + upward price = squeeze (+1)'],
+      ['Unusual options activity (calls vs. puts)?',v(d.layer4?.options_activity?.observation),s(d.layer4?.options_activity?.score),'Large call buying = bullish signal'],
+      ['Layer 4 Subtotal','',d.layer4?.subtotal??'','Max: +3  |  Min: −3'],['','','',''],
+      ['  LAYER 5 — MARKET CONTEXT','','',''],
+      ['Signal / Indicator','Your Observation','Score  (+1/0/−1)','Notes'],
+      ['S&P 500 / Nasdaq in uptrend?',v(d.layer5?.sp500_trend?.observation),s(d.layer5?.sp500_trend?.score),'Broad market direction matters'],
+      ["Stock's sector outperforming the market?",v(d.layer5?.sector_performance?.observation),s(d.layer5?.sector_performance?.score),'Check Finviz sector map'],
+      ['VIX (Fear Index) low and stable?',v(d.layer5?.vix?.observation),s(d.layer5?.vix?.score),'VIX <20=calm; 20–30=cautious; >30=fearful'],
+      ['Layer 5 Subtotal','',d.layer5?.subtotal??'','Max: +3  |  Min: −3'],['','','',''],
+      ['TOTAL SCORE','',d.total_score??'','Max: +15  |  Min: −15'],['','','',''],
+      ['SIGNAL INTERPRETATION','','',''],
+      ['+10 to +15','STRONG BUY','Multiple layers confirm bullish thesis.',''],
+      ['+5 to +9','BULLISH','Good signal — hold position, monitor closely.',''],
+      ['+1 to +4','MILD BULLISH','Lean bullish but mixed evidence.',''],
+      ['−1 to 0','NEUTRAL','No clear edge. Protect capital.',''],
+      ['−2 to −4','MILD BEARISH','More negatives than positives. Tighten stop-loss.',''],
+      ['−5 to −9','BEARISH','Multiple warning signs. Reduce exposure or hedge.',''],
+      ['−10 to −15','STRONG SELL','Majority of signals negative. Consider exiting.',''],['','','',''],
+      ["ONE-SENTENCE THESIS",'','',''],
+      [v(d.one_sentence_thesis),'','',''],['','','',''],
+      ['RISK MANAGEMENT','','',''],
+      ['Current Price ($):',v(d.current_price),'Stop-Loss Price ($):',v(d.stop_loss)],
+      ['Price Target ($):',v(d.target_price_mean),'Risk/Reward Ratio:',v(d.risk_reward)],['','','',''],
+      ['⚠ DISCLAIMER: For informational purposes only. Not financial advice.','','',''],
+    ];
+    const ws2 = XLSX.utils.aoa_to_sheet(sc);
+    ws2['!cols'] = [{wch:50},{wch:42},{wch:18},{wch:44}];
+    ws2['!merges'] = [{s:{r:0,c:0},e:{r:0,c:3}},{s:{r:1,c:0},e:{r:1,c:3}}];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Scorecard');
+
+    XLSX.writeFile(wb, `${ticker}_Scorecard_${today.replace(/-/g,'')}.xlsx`);
   }
 
   // ── RESET ─────────────────────────────────────────────
   function resetApp() {
     extractedData = null; currentCompany = '';
-    chartDataCache = {}; chartCanvasImages = {};
+    yahooUrlManuallyEdited = false;
     if (progressTimer) clearInterval(progressTimer);
+    if (tickerDebounce) clearTimeout(tickerDebounce);
     setProgress(0, 'Ready');
     document.getElementById('progress-bar-fill').style.background = 'linear-gradient(90deg,#00e676,#00b0ff)';
     document.getElementById('progress-pct').style.color = '#00e676';
     document.getElementById('result-banner').style.display = 'none';
-    document.getElementById('charts-section').style.display = 'none';
     document.getElementById('form-fields').style.display = 'block';
     document.getElementById('start-btn').style.display = 'block';
     document.getElementById('start-btn').disabled = false;
@@ -1136,6 +738,7 @@ Return only the raw JSON.` }]
     document.getElementById('ticker').value = '';
     document.getElementById('company-name').value = '';
     document.getElementById('yahoo-url').value = '';
+    document.getElementById('exchange-ca').checked = true;
     setHint('','');
     document.querySelectorAll('.url-input').forEach(i => i.value = '');
     hideError();
